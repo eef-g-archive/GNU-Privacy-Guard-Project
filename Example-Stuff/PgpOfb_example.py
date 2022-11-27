@@ -75,7 +75,7 @@ class PgpOfb(object):
         self.key = key # key is a string of bytes
         self.iv = '\x00' * len(key) # iv is set to all zeros
         self.FR = self.iv # FR is set to the IV
-        self.FRE = None # FR_encrypted is set to None
+        self.FRE = '' # FR_encrypted is set to None
         # 2.  FR is encrypted to produce FRE (FR Encrypted).  This is the encryption of an all-zero value.
         self.FRE = self.encrypt(self.FR) # FR is encrypted
         self.FRE = self.FRE[:len(self.FR)] # FR_encrypted is truncated to the length of FR
