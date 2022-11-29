@@ -108,7 +108,7 @@ def _nsplit(data, split_size=64):
         stop  = start + split_size
         yield data[start:stop]
     if last_block_size > 0:
-        yield data[stop:]
+        yield data[start:]
 
 
 def _permute(block, table):

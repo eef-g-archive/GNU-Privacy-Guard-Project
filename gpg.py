@@ -1,12 +1,15 @@
 import gpg_consts
-import argparse
 import hashlib
+import cui_des
+import sys
+import binascii
 
 
 #####################
 #   PACKET PARSING  #
 #####################
 def packet_parse(filename):
+    encrypted_data = []
     with open(filename, 'rb') as file:
         content = file.read()
     
@@ -79,7 +82,9 @@ def packet_parse(filename):
         else:
             print(f": No code to support packet type {tag} :")
         offset += hlen + plen
+        encrypted_data.append(p_data)
 
+    return encrypted_data
 #################
 #       S2K     #
 #################
@@ -118,17 +123,91 @@ def calculate_s2k(password, s2k_mode, key_length, hash_alogirthm):
         raise ValueError(f"Invalid S2K mode {s2k_mode}")
 
 
+######################
+#    OFB DECRYPT     #
+######################
+
+def OFB_decryption(data, key):
+    iv = b'\x00' * 8
+    decryptions = []
+    # Skip first char in packet bc it checks if its valid or not
+    ct = data[1:]
+
+    # Decrypt first two blocks separately -- starting w/ first block
+    first = ct[:8]
+    DESobj = cui_des.TDES(key, "OFB", iv)
+    curr_decrypt = DESobj.decrypt(first)
+    decryptions.append(curr_decrypt)
+
+    # Decrypt second block
+    DESobj = cui_des.TDES(key, "OFB", first)
+    second = ct[8:16]
+    curr_decrypt = DESobj.decrypt(second)
+    decryptions.append(curr_decrypt)
+
+
+    iv = second
+    pt = data
+    for block in cui_des._nsplit(data[16:], 8):
+        DESobj = cui_des.TDES(key, "OFB", iv)
+        curr_decrypt = DESobj.decrypt(block)
+        decryptions.append(curr_decrypt)
+        iv = block
+
+    # Rejoin all the blocks
+    final_decrypt = b"".join(decryptions)
+    return final_decrypt
+
+
+#####################
+#   MISC FUNCTIONS  #
+#####################
+def hex_to_string(hex_data):
+    """
+    INPUT:
+    takes in an array of hex data
+    OUTPUT:
+    an array of string data
+    """
+    #put the data in an array
+    string_data = []
+    for i in range(len(hex_data)):
+        byte_packet = binascii.unhexlify(hex_data[i])
+        string_packet = _get_output(byte_packet, "plaintext")
+        string_data.append(string_packet[14:-24])
+    #print the data out
+    for i in range(len(string_data)):
+        print("packet " + str(i + 1) + " string: " + str(string_data[i]))
+    return string_data
+
+
+def _get_output(final_bytes, output_type):
+    """takes in bytes, and the outputtype, and then returns either plaintext or the bytes depending on the type of output"""
+    output = ''
+    if output_type == "plaintext":
+        try:
+            output = final_bytes.decode('UTF-8', 'strict')
+        except:
+            return final_bytes
+    elif output_type == "hex":
+        for byte in final_bytes:
+            output += hex(byte)[2:].zfill(2)
+    else:
+        output == final_bytes
+    return output
+
+
 
 if __name__ == "__main__":
-
+    # readFile, writeFile, password, s2kMode, keyLength, hashAlgorithm
     
-    parser = argparse.ArgumentParser(prog="GPG Program", 
-                                     description="A simple GPG program for Information Security")
-    parser.add_argument('filename')
-    #parser.add_argument('--s2k-mode')
-    try:
-        args = parser.parse_args()
-    except:
-        print("Please provide a filename to parse packets from.")
-        exit(0)
-    packet_parse(args.filename)
+    # NEED TO DO ERROR CHECKING FOR FINAL PROJECT
+    #readFile = str(sys.argv[1]) # start w/ argv[1]
+    readFile = "C:\\Users\\etan3\\OneDrive\\Documents\\GitHub\\GNU-Privacy-Guard-Project\\test.txt.gpg"
+    packet_data = packet_parse(readFile)
+    s2k_key = calculate_s2k("test", 0, 24, 1)
+    decrypted = []
+    for i in range(len(packet_data) - 1):
+        decrypt_packet = OFB_decryption(packet_data[i + 1], s2k_key)
+        decrypted.append(decrypt_packet)
+        print(f"Decrypted Packet {str(i + 1)} : {str(decrypt_packet)}")
